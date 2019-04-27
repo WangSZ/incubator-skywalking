@@ -32,11 +32,21 @@ public class Buffer<T> {
     private AtomicRangeInteger index;
     private List<QueueBlockingCallback<T>> callbacks;
 
+    private ConcurrentLinkedQueue<Thread>[] waitingThreads;
+    private int sleepMillis = 10_000;
+
     Buffer(int bufferSize, BufferStrategy strategy) {
         buffer = new Object[bufferSize];
         this.strategy = strategy;
         index = new AtomicRangeInteger(0, bufferSize);
         callbacks = new LinkedList<QueueBlockingCallback<T>>();
+        if (strategy.equals(BufferStrategy.BLOCKING)) {
+            waitingThreads = new ConcurrentLinkedQueue[bufferSize];
+            for (int i = 0; i < bufferSize; i++) {
+                waitingThreads[i] = new ConcurrentLinkedQueue<>();
+            }
+        }
+
     }
 
     void setStrategy(BufferStrategy strategy) {
@@ -61,10 +71,17 @@ public class Buffer<T> {
                             }
                         }
                         try {
-                            Thread.sleep(1L);
-                        } catch (InterruptedException e) {
+                            // 如厕排队，不要重复领号
+                            if (!waitingThreads[i].contains(Thread.currentThread())) {
+                                waitingThreads[i].offer(Thread.currentThread());
+                            }
+                            Thread.sleep(sleepMillis);
+                            // TODO 长期排队、队伍过长怎么办？
+                        } catch (InterruptedException ignore) {
                         }
                     }
+                    // 走之前销号
+                    waitingThreads[i].remove(Thread.currentThread());
                     break;
                 case IF_POSSIBLE:
                     return false;
@@ -84,8 +101,17 @@ public class Buffer<T> {
         LinkedList<T> result = new LinkedList<T>();
         for (int i = start; i < end; i++) {
             if (buffer[i] != null) {
-                result.add((T)buffer[i]);
+                result.add((T) buffer[i]);
                 buffer[i] = null;
+
+                // 如果有排队的线程，则唤醒队列中的第一个
+                try {
+                    Thread firstThread = waitingThreads[i].peek();
+                    if (firstThread != null) {
+                        firstThread.interrupt();
+                    }
+                } catch (Throwable ignore) {
+                }
             }
         }
         return result;
