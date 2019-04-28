@@ -33,7 +33,7 @@ public class Buffer<T> {
     private List<QueueBlockingCallback<T>> callbacks;
 
     private ConcurrentLinkedQueue<Thread>[] waitingThreads;
-    private int sleepMillis = 10_000;
+    private int sleepMillis = 10000;
 
     Buffer(int bufferSize, BufferStrategy strategy) {
         buffer = new Object[bufferSize];
@@ -43,7 +43,7 @@ public class Buffer<T> {
         if (strategy.equals(BufferStrategy.BLOCKING)) {
             waitingThreads = new ConcurrentLinkedQueue[bufferSize];
             for (int i = 0; i < bufferSize; i++) {
-                waitingThreads[i] = new ConcurrentLinkedQueue<>();
+                waitingThreads[i] = new ConcurrentLinkedQueue();
             }
         }
 
@@ -116,5 +116,4 @@ public class Buffer<T> {
         }
         return result;
     }
-
 }
