@@ -164,4 +164,82 @@ public class DataCarrierTest {
 
         Assert.assertTrue(time2 - time1 > 2000);
     }
+    
+    
+    @Test
+    public void testBufferBlocking(){
+        {
+            final AtomicLong i =new AtomicLong();
+            final AtomicLong consumedCount =new AtomicLong();
+            final DataCarrier<SampleData> carrier = new DataCarrier<SampleData>(2, 2);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+
+                    while(i.get()<100) {
+                        try {
+                            Thread.sleep(new Random().nextInt(20));
+                            new Thread(new Runnable(){
+                                @Override
+                                public void run() {
+                                    long start=System.currentTimeMillis();
+                                    SampleData data = new SampleData().setName("d" + i.incrementAndGet());
+                                    System.out.println(String.format("%s Saving %s %s",Thread.currentThread(),i,data));
+                                    Assert.assertTrue(carrier.produce(data));
+                                    System.out.println(String.format("%s Saved %s %s .cost %s",Thread.currentThread(),i,data,System.currentTimeMillis()-start));
+                                }
+                            }).start();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }).start();
+            long time1 = System.currentTimeMillis();
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    IConsumer<SampleData> consumer = new IConsumer<SampleData>() {
+                        int i = 0;
+
+                        @Override
+                        public void init() {
+
+                        }
+
+                        @Override
+                        public void consume(List<SampleData> data) {
+                            try {
+                                consumedCount.addAndGet(data.size());
+                                System.out.println("Consume "+data);
+                                Thread.sleep(200);
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        }
+
+                        @Override
+                        public void onError(List<SampleData> data, Throwable t) {
+
+                        }
+
+                        @Override
+                        public void onExit() {
+
+                        }
+                    };
+                    carrier.consume(consumer, 1);
+                }
+            }).start();
+
+            long time2 = System.currentTimeMillis();
+            try {
+                TimeUnit.SECONDS.sleep(6);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            Assert.assertEquals(i.get(),consumedCount.get());
+        }
+    }
 }
