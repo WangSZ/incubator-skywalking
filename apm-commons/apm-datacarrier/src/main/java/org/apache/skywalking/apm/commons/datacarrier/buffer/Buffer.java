@@ -20,6 +20,8 @@ package org.apache.skywalking.apm.commons.datacarrier.buffer;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
 import org.apache.skywalking.apm.commons.datacarrier.callback.QueueBlockingCallback;
 import org.apache.skywalking.apm.commons.datacarrier.common.AtomicRangeInteger;
 
@@ -33,7 +35,7 @@ public class Buffer<T> {
     private List<QueueBlockingCallback<T>> callbacks;
 
     private ConcurrentLinkedQueue<Thread>[] waitingThreads;
-    private int sleepMillis = 10000;
+    private int sleepMillis = Integer.valueOf(System.getProperty("datacarrier.buffer.sleep.millis","30000"));
 
     Buffer(int bufferSize, BufferStrategy strategy) {
         buffer = new Object[bufferSize];
@@ -76,7 +78,9 @@ public class Buffer<T> {
                                 waitingThreads[i].offer(Thread.currentThread());
                             }
                             Thread.sleep(sleepMillis);
-                            // TODO 长期排队、队伍过长怎么办？
+                            // 写入超时后抛出异常。 这不是个好办法，但比内存耗尽后宕机要好
+                            waitingThreads[i].remove(Thread.currentThread());
+                            throw new IllegalStateException(String.format("Waiting more than %s milliseconds !!Maybe your storage is too slow.You can set -Ddatacarrier.buffer.sleep.millis=60000 to wait longer.But better ",sleepMillis));
                         } catch (InterruptedException ignore) {
                         }
                     }
